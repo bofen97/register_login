@@ -29,77 +29,43 @@ func (ut *UserTable) CreateTable() error {
 	query := `
 	CREATE TABLE IF NOT EXISTS userTable (
 		uid INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		phonenumber TEXT NOT NULL,
-		password TEXT ,
-		created_at DATETIME NOT NULL,
-		msgcode INT(11) ,
-		msgcode_at DATETIME
+		email TEXT NOT NULL,
+		password TEXT NOT NULL,
+		created_at DATETIME,
+		validlink TEXT
 	);`
 
 	if _, err := ut.db.Exec(query); err != nil {
-		log.Fatal(err)
 		return err
 	}
 	return nil
 }
 
-func (ut *UserTable) InsertPhonenumberMsgCode(phonenumber string, msgcode int) error {
+func (ut *UserTable) InsertEmailPasswdAndValidlink(email string, password string, validlink string) error {
 
 	insertStr := `
 		insert into userTable(
-			phonenumber,
-			msgcode,
-			created_at,
-			msgcode_at
-		) values(?,?,?,?)`
+			email,
+			password,
+			validlink
+		) values(?,?,?)`
 
-	_, err := ut.db.Exec(insertStr, phonenumber, msgcode, time.Now(), time.Now())
+	_, err := ut.db.Exec(insertStr, email, password, validlink)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	return nil
 }
-func (ut *UserTable) UpdatePhonenumberPassword(phonenumber string, password string) error {
+
+func (ut *UserTable) CreateUserCommit(validLink string) error {
 
 	updateStr := `
-		update userTable set password = ? where phonenumber = ?
+		update userTable set created_at = ? where validLink = ?
 	`
 
-	_, err := ut.db.Exec(updateStr, password, phonenumber)
+	_, err := ut.db.Exec(updateStr, time.Now(), validLink)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	return nil
-}
-
-func (ut *UserTable) UpdatePhonenumberMsgCode(phonenumber string, msgcode int) error {
-	/*
-		UPDATE table_name
-		SET column1 = value1, column2 = value2, ...
-		WHERE condition;
-
-	*/
-	updateStr := `
-		update userTable set msgcode = ? , msgcode_at = ? where phonenumber= ?
-	`
-	_, err := ut.db.Exec(updateStr, msgcode, time.Now(), phonenumber)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return nil
-}
-
-func (ut *UserTable) DeleteUserInfo(phonenumber string) error {
-
-	//DELETE FROM table_name
-	//WHERE condition;
-	deleteStr := `
-		delete from userTable where phonenumber = ?
-	`
-	_, err := ut.db.Exec(deleteStr, phonenumber)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return nil
-
 }

@@ -49,6 +49,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/register", register)
 	mux.Handle("/login", login)
+	mux.HandleFunc("/valid", register.ValidLinkCheck)
 	server := &http.Server{
 		Addr:    serverPort,
 		Handler: mux,

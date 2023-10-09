@@ -1,110 +1,55 @@
 package main
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
-	"strconv"
 	"time"
 )
 
 // register module
-// POST register phonenumber
-// generate MSGCODE to send && insert userTable
+// POST register email
+// generate link  to send && insert userTable
 type RegisterUser struct {
 	Ut *UserTable
 }
 type RegisterUserData struct {
-	Phonenumber string `json:"phonenumber"`
-	Type        int    `json:"type"` //type 0 , msgcode else passwd
-	Password    string `json:"password"`
-	MsgCode     int    `json:"msgcode"` //check msgcode is right ?
-
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-func (register *RegisterUser) CheckUserExist(phonenumber string) (bool, error) {
+func (register *RegisterUser) CheckUserExist(email string) (bool, error) {
 	//check user registed ?
-
-	row := register.Ut.db.QueryRow(" select password from userTable where phonenumber = ? ", phonenumber)
-	var passwd string
-	if err := row.Scan(&passwd); err != nil {
-		return false, nil
+	//should be 0;
+	row := register.Ut.db.QueryRow(" select COUNT(email) from userTable where email = ? and created_at is not null ", email)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return false, err
 	}
-	if passwd == "" {
-		return false, nil
+	if count != 0 {
+		return true, nil
 	}
-	return true, nil
+	return false, nil
 
 }
 
-// TODO message send API,maybe ALIYUN
-func (register *RegisterUser) GenMsgCodeAndSendMsgToUser(phonenumber string) error {
-	var msgCode int
-	for {
-		msgCode = rand.Intn(10000)
-		if msgCode >= 1000 {
-			break
-		}
-	}
+func (register *RegisterUser) GenValidLinkSendToUser(email string, password string) error {
+	salt := time.Now().String()
 
-	row := register.Ut.db.QueryRow("select uid from userTable where phonenumber = ? ", phonenumber)
-	var uid int
-	err := row.Scan(&uid)
-	if err != nil {
-		err = register.Ut.InsertPhonenumberMsgCode(phonenumber, msgCode)
-		if err != nil {
-			log.Fatal(err)
-			return err
-		}
-	} else {
-		register.Ut.db.Exec("update userTable set msgcode = ? , msgcode_at = ? where phonenumber = ? ", msgCode, time.Now(), phonenumber)
+	validLink := fmt.Sprintf("%x", md5.Sum([]byte(email+salt)))
+	log.Printf("gen valid link %s \n", validLink)
 
-	}
-	phonenumberInt, err := strconv.Atoi(phonenumber)
+	//insert into userTable (validlink)
+	err := register.Ut.InsertEmailPasswdAndValidlink(email, password, validLink)
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
 
-	//send user
-	fmt.Printf("Send MsgCode :[%d] to User [%d]\n", msgCode, phonenumberInt)
-	return nil
-
-}
-
-// check msgcode before 5 mins ago?
-// check msgcode is exits？
-// and msgcode is right ?
-func (register *RegisterUser) CheckMsgCodeIsNotExistAndBefore5MinsAgo(phonenumber string, msgcode int) bool {
-	row := register.Ut.db.QueryRow("select msgcode_at , msgcode from userTable where phonenumber= ? ", phonenumber)
-	var msgcode_at time.Time
-	var msgcodeTmp int
-	err := row.Scan(&msgcode_at, &msgcodeTmp)
-	if err != nil {
-		return true
-	}
-
-	if time.Since(msgcode_at) > 5*time.Minute {
-		return true
-	}
-	if msgcodeTmp != msgcode {
-		return true
-	}
-
-	return false
-}
-func (register *RegisterUser) RegistePhonenumerAndPassWord(phonenumber string, password string) error {
-
-	err := register.Ut.UpdatePhonenumberPassword(phonenumber, password)
-	if err != nil {
-		log.Fatal(err)
-		return err
-	}
-	fmt.Printf("Registe Phonenumber [%s]  And Password [%s] \n", phonenumber, password)
-
+	//send valid link to user
+	fmt.Printf("Send ValidLink :[http://localhost:8080/valid?hash=%s] to User [%s]\n", validLink, email)
 	return nil
 
 }
@@ -124,46 +69,78 @@ func (register *RegisterUser) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			if registerData.Type == 0 {
-
-				//got phonenumber&code type
-				// check user exist ?
-
-				flag, _ := register.CheckUserExist(registerData.Phonenumber)
-				if flag {
-					w.WriteHeader(http.StatusCreated)
-					fmt.Fprintf(w, "User [%s] exist \n", registerData.Phonenumber)
-					return
-				}
-				err = register.GenMsgCodeAndSendMsgToUser(registerData.Phonenumber)
-				if err != nil {
-					w.WriteHeader(http.StatusBadRequest)
-					return
-				}
-
-			} else {
-				// check msgcode is not exits？&& msgcode time.since(msgcode_at) > 5 mins?
-				// and check msgcode is right ?
-				flag := register.CheckMsgCodeIsNotExistAndBefore5MinsAgo(registerData.Phonenumber, registerData.MsgCode)
-				if flag {
-					w.WriteHeader(http.StatusRequestTimeout)
-					fmt.Fprint(w, "Msgcode timeout , plase repeat! \n")
-					return
-				}
-
-				//got phonenumber& password
-				err = register.RegistePhonenumerAndPassWord(registerData.Phonenumber, registerData.Password)
-				if err != nil {
-					w.WriteHeader(http.StatusBadRequest)
-					return
-				}
+			log.Printf("get registe request %v\n", registerData)
+			// check user email exist ?
+			isExist, err := register.CheckUserExist(registerData.Email)
+			if err != nil {
+				log.Print(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if isExist {
+				w.WriteHeader(http.StatusCreated)
+				return
+			}
+			//user not exist.
+			// generate link send to user;
+			err = register.GenValidLinkSendToUser(registerData.Email, registerData.Password)
+			if err != nil {
+				log.Printf("%v\n", err)
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
 			}
 
 			w.WriteHeader(http.StatusOK)
 			return
-
 		}
 
+	}
+
+	w.WriteHeader(http.StatusBadRequest)
+
+}
+
+// precommit is validlink exist and created_at is null , count  should be 1
+func (register *RegisterUser) ValidLinkIsPreCommit(validLink string) (bool, error) {
+
+	row := register.Ut.db.QueryRow(" select COUNT(email) from userTable where validlink = ? and created_at is null ", validLink)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return false, err
+	}
+	if count == 1 {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (register *RegisterUser) ValidLinkCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		validlink := r.URL.Query().Get("hash")
+		log.Printf("GET VALIDLINK HASH %s\n", validlink)
+		//validlink exist ?
+		preCommit, err := register.ValidLinkIsPreCommit(validlink)
+		if err != nil {
+			log.Printf("%v\n", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if !preCommit {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// precommit status
+
+		err = register.Ut.CreateUserCommit(validlink)
+		if err != nil {
+			log.Printf("%v\n", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		w.Write([]byte("User Create , Welcome . "))
+		// w.WriteHeader(http.StatusOK)
+		return
 	}
 
 	w.WriteHeader(http.StatusBadRequest)

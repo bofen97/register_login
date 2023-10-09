@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"log"
 	"time"
 )
 
@@ -14,12 +13,12 @@ func (sess *SessionTable) Connect(url string) (err error) {
 
 	sess.db, err = sql.Open("mysql", url)
 	if err != nil {
-		log.Fatal(err)
+
 		return err
 	}
 	err = sess.db.Ping()
 	if err != nil {
-		log.Fatal(err)
+
 		return err
 	}
 	return nil
@@ -34,7 +33,7 @@ func (sess *SessionTable) CreateTable() error {
 	);`
 
 	if _, err := sess.db.Exec(query); err != nil {
-		log.Fatal(err)
+
 		return err
 	}
 	return nil
@@ -45,7 +44,7 @@ func (sess *SessionTable) InsertSessionAndUid(session string, uid int) error {
 	query := ` insert into sessionTable(session,uid,created_at) values(?,?,?)`
 
 	if _, err := sess.db.Exec(query, session, uid, time.Now()); err != nil {
-		log.Fatal(err)
+
 		return err
 	}
 	return nil
