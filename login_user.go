@@ -16,59 +16,50 @@ type LoginUser struct {
 	Session *SessionTable
 }
 type LoginUserData struct {
-	Phonenumber string `json:"phonenumber"`
-	Password    string `json:"password"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // check passwd
-func (login *LoginUser) CheckPasswordIsWrong(phonenumber string, password string) bool {
-	row := login.Ut.db.QueryRow("select password from userTable where phonenumber= ? ", phonenumber)
-	var passwordTmp string
-	err := row.Scan(&passwordTmp)
-
-	if err != nil {
-		log.Printf("Got User [%s] Login Request && Passwd [%s]  , But user not exist  \n", phonenumber, password)
-
-		return true
+func (login *LoginUser) CheckUserIsOK(email string, password string) (bool, error) {
+	row := login.Ut.db.QueryRow("select COUNT(email) from userTable where email= ? and password = ? and created_at is not null ", email, password)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return false, err
 	}
-	if passwordTmp != password {
-		log.Printf("Got User [%s] Login Request && Passwd [%s]  , But Not Equ [%s] \n", phonenumber, password, passwordTmp)
-		return true
+	if count == 1 {
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 type LoginResp struct {
 	Session string `json:"session"`
 }
 
-func (login *LoginUser) ResponseSession(w http.ResponseWriter, phonenumber string) error {
+func (login *LoginUser) GenUserCurrentSession(email string) ([]byte, error) {
 
-	row := login.Ut.db.QueryRow("select uid from userTable where phonenumber= ?  ", phonenumber)
+	row := login.Ut.db.QueryRow("select uid from userTable where email= ?  and created_at is not null", email)
 
 	var loginresp LoginResp
-	var uidTmp int
-	row.Scan(&uidTmp)
+	var uid int
+	row.Scan(&uid)
 
 	//gen session
-	sessionStr := strconv.Itoa(uidTmp) + time.Now().String() + phonenumber
+	sessionStr := strconv.Itoa(uid) + time.Now().String() + email
 	sessionByte := sha256.Sum256([]byte(sessionStr))
 	loginresp.Session = fmt.Sprintf("%x", sessionByte)
 
-	err := login.Session.InsertSessionAndUid(loginresp.Session, uidTmp)
+	err := login.Session.InsertSessionAndUid(loginresp.Session, uid)
 	if err != nil {
-		log.Fatal(err)
-		return err
+		return nil, err
 	}
 	data, err := json.MarshalIndent(loginresp, " ", " ")
 	if err != nil {
-		log.Fatal(err)
-		return err
+		return nil, err
 	}
-	w.Write(data)
-
-	log.Printf("Insert session [%s] and id [%d] \n", loginresp.Session, uidTmp)
-	return nil
+	log.Printf("Insert session [%s] and id [%d] \n", loginresp.Session, uid)
+	return data, nil
 
 }
 func (login *LoginUser) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -88,22 +79,29 @@ func (login *LoginUser) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			//check passwd && user exist ?
 
-			flag := login.CheckPasswordIsWrong(loginData.Phonenumber, loginData.Password)
-			if flag {
-				w.WriteHeader(http.StatusNonAuthoritativeInfo)
-				return
-			}
-			log.Printf("User [%s] logined  \n", loginData.Phonenumber)
-
-			// return session
-			err = login.ResponseSession(w, loginData.Phonenumber)
+			//check user exist ?
+			ok, err := login.CheckUserIsOK(loginData.Email, loginData.Password)
 			if err != nil {
+				log.Printf("%v\n", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			//w.WriteHeader(http.StatusOK)
+			if !ok {
+				w.WriteHeader(http.StatusNotAcceptable)
+				return
+			}
+			//is ok
+			log.Printf("USER [%s]   PASSWD [%s] login \n", loginData.Email, loginData.Password)
+			w.WriteHeader(http.StatusOK)
+			// return session
+			sess, err := login.GenUserCurrentSession(loginData.Email)
+			if err != nil {
+				log.Printf("%v\n", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.Write(sess)
 			return
 		}
 
