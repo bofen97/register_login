@@ -69,3 +69,16 @@ func (ut *UserTable) CreateUserCommit(validLink string) error {
 	}
 	return nil
 }
+func (ut *UserTable) GetCommitEmail(validLink string) (string, error) {
+	var email string
+	updateStr := `
+		select email from userTable where created_at is not null and validLink = ?
+	`
+
+	row := ut.db.QueryRow(updateStr, validLink)
+	err := row.Scan(&email)
+	if err != nil {
+		return "", err
+	}
+	return email, nil
+}

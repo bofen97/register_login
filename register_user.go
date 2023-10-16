@@ -8,13 +8,17 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/ses"
 )
 
 // register module
 // POST register email
 // generate link  to send && insert userTable
 type RegisterUser struct {
-	Ut *UserTable
+	Ut  *UserTable
+	Svc *ses.SES
 }
 type RegisterUserData struct {
 	Email    string `json:"email"`
@@ -49,7 +53,14 @@ func (register *RegisterUser) GenValidLinkSendToUser(email string, password stri
 	}
 
 	//send valid link to user
-	fmt.Printf("Send ValidLink :[http://localhost:8080/valid?hash=%s] to User [%s]\n", validLink, email)
+
+	str, err := BuildEmailTemplate(fmt.Sprintf("http://localhost:8080/valid?hash=%s", validLink))
+	if err != nil {
+		return err
+	}
+
+	register.SendMessage(email, emailfrom, str)
+	fmt.Printf(" %s send ValidLink :[%s] to User [%s]\n", emailfrom, validLink, email)
 	return nil
 
 }
@@ -137,12 +148,47 @@ func (register *RegisterUser) ValidLinkCheck(w http.ResponseWriter, r *http.Requ
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-
-		w.Write([]byte("User Create , Welcome . "))
-		// w.WriteHeader(http.StatusOK)
+		//get mail
+		email, err := register.Ut.GetCommitEmail(validlink)
+		if err != nil {
+			log.Printf("%v\n", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		BuildRegisteOk(w, email)
 		return
 	}
 
 	w.WriteHeader(http.StatusBadRequest)
+
+}
+
+func (register *RegisterUser) SendMessage(to, from string, registMessage string) {
+	input := BuildMessage(to, from, registMessage)
+	result, err := register.Svc.SendEmail(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case ses.ErrCodeMessageRejected:
+				fmt.Println(ses.ErrCodeMessageRejected, aerr.Error())
+			case ses.ErrCodeMailFromDomainNotVerifiedException:
+				fmt.Println(ses.ErrCodeMailFromDomainNotVerifiedException, aerr.Error())
+			case ses.ErrCodeConfigurationSetDoesNotExistException:
+				fmt.Println(ses.ErrCodeConfigurationSetDoesNotExistException, aerr.Error())
+			case ses.ErrCodeConfigurationSetSendingPausedException:
+				fmt.Println(ses.ErrCodeConfigurationSetSendingPausedException, aerr.Error())
+			case ses.ErrCodeAccountSendingPausedException:
+				fmt.Println(ses.ErrCodeAccountSendingPausedException, aerr.Error())
+			default:
+				fmt.Println(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			fmt.Println(err.Error())
+		}
+		return
+	}
+	log.Println(result)
 
 }

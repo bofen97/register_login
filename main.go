@@ -8,6 +8,8 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+var emailfrom string
+
 func main() {
 
 	sqlurl := os.Getenv("sqlurl")
@@ -20,8 +22,26 @@ func main() {
 		log.Fatal("serverPort is none")
 		return
 	}
+	region := os.Getenv("region")
+	if region == "" {
+		region = "us-east-1"
 
+	}
+	emailfrom = os.Getenv("emailfrom")
+	if emailfrom == "" {
+		log.Fatal("emailfrom is none")
+		return
+	}
+
+	log.Printf("region :%s ", region)
 	register := new(RegisterUser)
+	svc, err := NewSession(region)
+	if err != nil {
+		log.Fatal(err)
+	}
+	register.Svc = svc
+	log.Print("aws svc ready .")
+
 	register.Ut = new(UserTable)
 	if err := register.Ut.Connect(sqlurl); err != nil {
 		log.Fatal(err)
@@ -50,6 +70,7 @@ func main() {
 	mux.Handle("/register", register)
 	mux.Handle("/login", login)
 	mux.HandleFunc("/valid", register.ValidLinkCheck)
+	mux.HandleFunc("/EasyTrackerLogo", Logo)
 	server := &http.Server{
 		Addr:    serverPort,
 		Handler: mux,
