@@ -55,7 +55,7 @@ func BuildRegisteOk(w http.ResponseWriter, email string) error {
 }
 
 func Logo(w http.ResponseWriter, r *http.Request) {
-	f, err := os.OpenFile("./EasyTracker.jpg", os.O_RDONLY, 0755)
+	f, err := os.OpenFile("./Easy.jpg", os.O_RDONLY, 0755)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

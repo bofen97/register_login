@@ -54,13 +54,13 @@ func (register *RegisterUser) GenValidLinkSendToUser(email string, password stri
 
 	//send valid link to user
 
-	str, err := BuildEmailTemplate(fmt.Sprintf("http://localhost:8080/valid?hash=%s", validLink))
+	str, err := BuildEmailTemplate(fmt.Sprintf("http://app-server-nlb.easypapertracker.com:8080/valid?hash=%s", validLink))
 	if err != nil {
 		return err
 	}
 
-	register.SendMessage(email, emailfrom, str)
-	fmt.Printf(" %s send ValidLink :[%s] to User [%s]\n", emailfrom, validLink, email)
+	register.SendMessage(email, "no-reply@easypapertracker.com", str)
+	fmt.Printf(" %s send ValidLink :[%s] to User [%s]\n", "no-reply@easypapertracker.com", validLink, email)
 	return nil
 
 }

@@ -82,3 +82,15 @@ func (ut *UserTable) GetCommitEmail(validLink string) (string, error) {
 	}
 	return email, nil
 }
+func (ut *UserTable) DeleteUserAccount(email string) error {
+
+	deleteStr := `
+		delete from userTable where email=?
+	`
+
+	_, err := ut.db.Exec(deleteStr, email)
+	if err != nil {
+		return err
+	}
+	return nil
+}
