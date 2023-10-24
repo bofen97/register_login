@@ -8,8 +8,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-var emailfrom string
-
 func main() {
 
 	sqlurl := os.Getenv("sqlurl")
@@ -26,11 +24,6 @@ func main() {
 	if region == "" {
 		region = "us-east-1"
 
-	}
-	emailfrom = os.Getenv("emailfrom")
-	if emailfrom == "" {
-		log.Fatal("emailfrom is none")
-		return
 	}
 
 	log.Printf("region :%s ", region)
@@ -52,6 +45,7 @@ func main() {
 	log.Printf("%s\n", "register created !")
 
 	login := new(LoginUser)
+	login.Register = register
 	login.Ut = new(UserTable)
 	login.Session = new(SessionTable)
 	if err := login.Ut.Connect(sqlurl); err != nil {

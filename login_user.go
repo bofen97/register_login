@@ -12,8 +12,9 @@ import (
 )
 
 type LoginUser struct {
-	Ut      *UserTable
-	Session *SessionTable
+	Ut       *UserTable
+	Session  *SessionTable
+	Register *RegisterUser
 }
 type LoginUserData struct {
 	Email    string `json:"email"`
@@ -64,37 +65,35 @@ func (login *LoginUser) GenUserCurrentSession(email string) ([]byte, error) {
 }
 func (login *LoginUser) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	switch r.Method {
-	case "POST":
-		if r.Header.Get("Content-Type") == "application/json" {
+	if r.Header.Get("Content-Type") == "application/json" {
 
-			data, err := io.ReadAll(r.Body)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			var loginData LoginUserData
-			err = json.Unmarshal(data, &loginData)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var loginData LoginUserData
+		err = json.Unmarshal(data, &loginData)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
-			//check user exist ?
-			ok, err := login.CheckUserIsOK(loginData.Email, loginData.Password)
-			if err != nil {
-				log.Printf("%v\n", err)
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			if !ok {
-				w.WriteHeader(http.StatusNotAcceptable)
-				return
-			}
-			//is ok
-			log.Printf("USER [%s]   PASSWD [%s] login \n", loginData.Email, loginData.Password)
-			w.WriteHeader(http.StatusOK)
-			// return session
+		//check user exist ?
+		ok, err := login.CheckUserIsOK(loginData.Email, loginData.Password)
+		if err != nil {
+			log.Printf("%v\n", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if !ok {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		//is ok
+		log.Printf("USER [%s]   PASSWD [%s] login \n", loginData.Email, loginData.Password)
+
+		if r.Method == "POST" {
 			sess, err := login.GenUserCurrentSession(loginData.Email)
 			if err != nil {
 				log.Printf("%v\n", err)
@@ -102,11 +101,29 @@ func (login *LoginUser) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			w.Write(sess)
+			// return session
+			return
+
+		} else if r.Method == "DELETE" {
+			//delete account
+			err := login.Ut.DeleteUserAccount(loginData.Email)
+			if err != nil {
+				log.Printf("%v\n", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			str, err := BuildEmailTemplateForDeleteAccount()
+			if err != nil {
+				log.Printf("%v\n", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			login.Register.SendMessage(loginData.Email, "no-reply@easypapertracker.com", str)
+			fmt.Printf(" %s send delete account msg to User [%s]\n", "no-reply@easypapertracker.com", loginData.Email)
+			w.WriteHeader(http.StatusOK)
 			return
 		}
-
-	default:
-		w.WriteHeader(http.StatusBadRequest)
-		return
 	}
+	w.WriteHeader(http.StatusBadRequest)
+
 }
