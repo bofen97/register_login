@@ -46,11 +46,13 @@ func main() {
 
 	login := new(LoginUser)
 	login.Register = register
+
 	login.Ut = new(UserTable)
-	login.Session = new(SessionTable)
 	if err := login.Ut.Connect(sqlurl); err != nil {
 		log.Fatal(err)
 	}
+
+	login.Session = new(SessionTable)
 	log.Printf("%s\n", "login connect !")
 	if err := login.Session.Connect(sqlurl); err != nil {
 		log.Fatal(err)
@@ -60,11 +62,29 @@ func main() {
 	}
 	log.Printf("%s\n", "Session created !")
 
+	subj := new(SubjectServer)
+	subj.Session = new(SessionTable)
+	if err := subj.Session.Connect(sqlurl); err != nil {
+		log.Fatal(err)
+	}
+
+	subj.St = new(SubjectTable)
+	if err := subj.St.Connect(sqlurl); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("%s\n", "subject  connected .. !")
+
+	if err := subj.St.CreateTable(); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("%s\n", "subject  table createTable .. !")
+
 	mux := http.NewServeMux()
 	mux.Handle("/register", register)
 	mux.Handle("/login", login)
 	mux.HandleFunc("/valid", register.ValidLinkCheck)
 	mux.HandleFunc("/EasyTrackerLogo", Logo)
+	mux.Handle("/subject_server", subj)
 	server := &http.Server{
 		Addr:    serverPort,
 		Handler: mux,
