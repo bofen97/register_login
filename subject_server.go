@@ -176,7 +176,7 @@ func (ss *SubjectServer) QueryExpiresDate(session string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	qrow := ss.St.db.QueryRow("select ifnull (max(expires_date),\"NO SUBJECT\") from subjectTable where uid= ?", uid)
+	qrow := ss.St.db.QueryRow("select ifnull (max(expires_date),\"Not subscribed yet\") from subjectTable where uid= ?", uid)
 	var date string
 	err = qrow.Scan(&date)
 	if err != nil {

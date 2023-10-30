@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/md5"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,20 +10,36 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/ses"
+	"gopkg.in/gomail.v2"
 )
 
 // register module
 // POST register email
 // generate link  to send && insert userTable
 type RegisterUser struct {
-	Ut  *UserTable
-	Svc *ses.SES
+	Ut *UserTable
+	D  *gomail.Dialer
 }
 type RegisterUserData struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+func (register *RegisterUser) InitialGoMail(password string) {
+	register.D = gomail.NewDialer("mail.privateemail.com", 587, "no-reply@easypapertracker.com", password)
+	register.D.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+}
+func (register *RegisterUser) SendMessage(useremail string, msg string) error {
+	m := gomail.NewMessage()
+	m.SetHeader("From", "no-reply@easypapertracker.com")
+	m.SetHeader("To", useremail)
+	m.SetHeader("Subject", "EasyPaperTracker")
+	m.SetBody("text/html", msg)
+
+	if err := register.D.DialAndSend(m); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (register *RegisterUser) CheckUserExist(email string) (bool, error) {
@@ -58,8 +75,10 @@ func (register *RegisterUser) GenValidLinkSendToUser(email string, password stri
 	if err != nil {
 		return err
 	}
-
-	register.SendMessage(email, "no-reply@easypapertracker.com", str)
+	err = register.SendMessage(email, str)
+	if err != nil {
+		return err
+	}
 	fmt.Printf(" %s send ValidLink :[%s] to User [%s]\n", "no-reply@easypapertracker.com", validLink, email)
 	return nil
 
@@ -160,35 +179,5 @@ func (register *RegisterUser) ValidLinkCheck(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.WriteHeader(http.StatusBadRequest)
-
-}
-
-func (register *RegisterUser) SendMessage(to, from string, registMessage string) {
-	input := BuildMessage(to, from, registMessage)
-	result, err := register.Svc.SendEmail(input)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case ses.ErrCodeMessageRejected:
-				fmt.Println(ses.ErrCodeMessageRejected, aerr.Error())
-			case ses.ErrCodeMailFromDomainNotVerifiedException:
-				fmt.Println(ses.ErrCodeMailFromDomainNotVerifiedException, aerr.Error())
-			case ses.ErrCodeConfigurationSetDoesNotExistException:
-				fmt.Println(ses.ErrCodeConfigurationSetDoesNotExistException, aerr.Error())
-			case ses.ErrCodeConfigurationSetSendingPausedException:
-				fmt.Println(ses.ErrCodeConfigurationSetSendingPausedException, aerr.Error())
-			case ses.ErrCodeAccountSendingPausedException:
-				fmt.Println(ses.ErrCodeAccountSendingPausedException, aerr.Error())
-			default:
-				fmt.Println(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			fmt.Println(err.Error())
-		}
-		return
-	}
-	log.Println(result)
 
 }

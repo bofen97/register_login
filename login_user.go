@@ -118,7 +118,12 @@ func (login *LoginUser) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			login.Register.SendMessage(loginData.Email, "no-reply@easypapertracker.com", str)
+			err = login.Register.SendMessage(loginData.Email, str)
+			if err != nil {
+				log.Printf("%v\n", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			fmt.Printf(" %s send delete account msg to User [%s]\n", "no-reply@easypapertracker.com", loginData.Email)
 			w.WriteHeader(http.StatusOK)
 			return
