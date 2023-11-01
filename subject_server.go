@@ -75,6 +75,7 @@ type VerifacteData struct {
 type VerifacteDataResp struct {
 	Infos       []Info        `json:"latest_receipt_info"`
 	RenewalInfo []RenewalInfo `json:"pending_renewal_info"`
+	Status      int           `json:"status"`
 }
 
 type Info struct {
@@ -90,6 +91,34 @@ type RenewalInfo struct {
 	AutoRenewalStatus string `json:"auto_renew_status"`
 }
 
+// "https://buy.itunes.apple.com/verifyReceipt"
+func QueryExpiresDateFromApple(url string, veriData VerifacteData) (*VerifacteDataResp, error) {
+	data, err := json.Marshal(veriData)
+	if err != nil {
+		return nil, err
+	}
+	buffer := bytes.NewBuffer(data)
+	request, err := http.NewRequest("POST", url, buffer)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("GO verifaction from %s .", url)
+	resp, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var vresp VerifacteDataResp
+	err = json.Unmarshal(respData, &vresp)
+	if err != nil {
+		return nil, err
+	}
+	return &vresp, nil
+
+}
 func (ss *SubjectServer) VerifactionDataFromApple(veriData string, session string) (bool, error) {
 
 	arg := VerifacteData{
@@ -97,29 +126,21 @@ func (ss *SubjectServer) VerifactionDataFromApple(veriData string, session strin
 		Password:       "91716a5c1381490384d07db9b5d80a12",
 		VeriData:       veriData,
 	}
-	data, err := json.Marshal(arg)
+	vresp, err := QueryExpiresDateFromApple("https://buy.itunes.apple.com/verifyReceipt", arg)
 	if err != nil {
 		return false, err
 	}
-	buffer := bytes.NewBuffer(data)
-	request, err := http.NewRequest("POST", "https://sandbox.itunes.apple.com/verifyReceipt", buffer)
-	if err != nil {
-		return false, err
+
+	if vresp.Status == 21007 {
+		log.Print("this not product env ..")
+		//repeat
+		vresp, err = QueryExpiresDateFromApple("https://sandbox.itunes.apple.com/verifyReceipt", arg)
+		if err != nil {
+			return false, err
+		}
+
 	}
-	log.Printf("GO Veri..")
-	resp, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return false, err
-	}
-	respData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, err
-	}
-	var vresp VerifacteDataResp
-	err = json.Unmarshal(respData, &vresp)
-	if err != nil {
-		return false, err
-	}
+
 	var subjectionInfo Info
 
 	for _, info := range vresp.Infos {
